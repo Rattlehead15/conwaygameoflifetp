@@ -1,4 +1,5 @@
 #include "Board.h"
+#include <string.h>
 #include <stdio.h>
 
 int board_init(board_t *board, size_t col, size_t row) {
@@ -24,15 +25,19 @@ int board_set(board_t board, int col, int row, char val) {
 }
 
 int board_load(board_t *board, char *str) {
-    int amount;
-    char letter;
+    int amount, largo;
+    char letter, aux[10];
     int x = 0, y = 0;
     while(sscanf(str, " %d%c", &amount, &letter) == 2) {
         // char aliveOrDead = (letter == 'X') << 1;
         for(int i = 0; i < amount; i++) {
             board_set(*board, x, y + i, letter/*aliveOrDead*/);
         }
-        str += amount;
+
+        sprintf(aux,"%d", amount);
+        printf("%s\n",aux);
+        printf("%d\n", strlen(aux));
+        str += strlen(aux)+2;
         y += amount;
         x += y / board->rows;
         y = y % board->rows;
