@@ -33,10 +33,8 @@ int board_load(board_t *board, char *str) {
         for(int i = 0; i < amount; i++) {
             board_set(*board, x, y + i, letter/*aliveOrDead*/);
         }
-
+        
         sprintf(aux,"%d", amount);
-        printf("%s\n",aux);
-        printf("%d\n", strlen(aux));
         str += strlen(aux)+2;
         y += amount;
         x += y / board->rows;

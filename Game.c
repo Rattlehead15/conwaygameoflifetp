@@ -12,6 +12,7 @@ game_t *loadGame(const char *filename) {
     while (fscanf(entrada,"%[^\n]\n", aux) != 'EOF') {
         strcat(str, aux);
     }
+    str[strlen(str)+1] = '\0';
     game_t jueguito;
     board_init(&jueguito.tablero, col, row);
     board_load(&jueguito.tablero, str);
