@@ -1,13 +1,17 @@
 #include <stdio.h>
+#include <string.h>
 #include "Game.h"
 
 #define SIZE 300
 
 game_t *loadGame(const char *filename) {
     FILE * entrada = fopen(filename, "r+");
-    char str[SIZE];
+    char str[SIZE], aux[SIZE];
     int procesos, col, row;
-    fscanf(entrada,"%d %d %d %[^\0]", procesos, row, col, str);
+    fscanf(entrada,"%d %d %d\n", procesos, row, col);
+    while (fscanf(entrada,"%[^\n]\n", aux) != 'EOF') {
+        strcat(str, aux);
+    }
     game_t jueguito;
     board_init(&jueguito.tablero, col, row);
     board_load(&jueguito.tablero, str);
