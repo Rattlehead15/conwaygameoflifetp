@@ -1,41 +1,139 @@
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
+#include <unistd.h>
 #include "Game.h"
 
 #define SIZE 300
 
+struct _cubiertos {
+    pthread_mutex_t tenedor;
+    pthread_mutex_t cuchillo;
+};
+
+typedef struct _cubiertos cubiertos;
+
+struct _iteracion_args {
+    board_t *board;
+    board_t *new;
+    int left;
+    int right;
+    int n;
+    cubiertos *comensales;
+    int n_comensales;
+};
+
+typedef struct _iteracion_args iteracion_args;
+
 game_t *loadGame(const char *filename) {
     FILE * entrada = fopen(filename, "r+");
     char str[SIZE], aux[SIZE];
-    int procesos, col, row;
-    fscanf(entrada,"%d %d %d\n", procesos, row, col);
-    while (fscanf(entrada,"%[^\n]\n", aux) != 'EOF') {
+    int ciclos, col, row;
+    fscanf(entrada," %d %d %d ", &ciclos, &col, &row);
+    while (fscanf(entrada,"%[^\n]\n", aux) != EOF) {
         strcat(str, aux);
     }
-    str[strlen(str)+1] = '\0';
-    game_t jueguito;
-    board_init(&jueguito.tablero, col, row);
-    board_load(&jueguito.tablero, str);
+    str[strlen(str)] = '\0';
+    game_t *jueguito = malloc(sizeof(game_t));
+    jueguito->ciclos = ciclos;
+    board_init(&jueguito->tablero, col, row);
+    board_load(&jueguito->tablero, str);
     fclose(entrada);
+
+    return jueguito;
 }
 
 void writeBoard(board_t board, const char *filename) {
     char str[300];
-    FILE * salida = fopen(salida,"w+");
+    FILE * salida = fopen(filename,"w+");
     board_show(board,str);
     fprintf(salida,"%s", str);
     fclose(salida);
 }
 
+void *iteracion(void* args);
+
 board_t *conwayGoL(board_t *board, unsigned int cycles, const int nuproc) {
-    board_t * nuevoTablero;
-    for(int i=0;i < cycles; i++) {
-        
+    int cols_por_proceso = (board->cols + nuproc - 1) / nuproc;
+    cubiertos *comensales = malloc(sizeof(cubiertos) * nuproc);
+    for(int i=0; i < nuproc; i++) {
+        pthread_mutex_init(&comensales[i].tenedor, NULL);
+        pthread_mutex_init(&comensales[i].cuchillo, NULL);
     }
-    return nuevoTablero;
+
+    for(int i=0; i < cycles; i++) {
+        board_t *new = malloc(sizeof(board_t));
+        board_init(new, board->cols, board->rows);
+        int left_offset = 0;
+        pthread_t *threads = malloc(sizeof(pthread_t) * nuproc);
+        for(int proc = 0; proc < nuproc; proc++) {
+            iteracion_args *args = malloc(sizeof(iteracion_args));
+            args->board = board;
+            args->new = new;
+            args->left = left_offset;
+            args->right = board->cols < (left_offset + cols_por_proceso) ? board->cols : left_offset + cols_por_proceso;
+            args->n = proc;
+            args->comensales = comensales;
+            args->n_comensales = nuproc;
+            left_offset += args->right - args->left;
+            pthread_create(&threads[proc], NULL, iteracion, args);
+        }
+        for(int proc = 0; proc < nuproc; proc++) {
+            pthread_join(threads[proc], NULL);
+        }
+    }
+    return board;
 }
 
-int main() {
-    
-    return 0;
+char new_value(board_t board, int col, int row) {
+    if(col == 2 && row == 2)
+        sleep(1);
+    int is_alive = board.cells[col][row] == 'O';
+    int neighbors = 0;
+    for(int col_offset = -1; col_offset < 2; col_offset++) {
+        for(int row_offset = -1; row_offset < 2; row_offset++) {
+            if(board_get_round(board, col + col_offset, row + row_offset) == 'O')
+                neighbors++;
+        }
+    }
+    if (is_alive) {
+        neighbors--;
+        return (neighbors == 2 || neighbors == 3) ? 'O' : 'X';
+    } else {
+        return (neighbors == 3) ? 'O' : 'X';
+    }
+}
+
+void *iteracion(void *args) {
+    iteracion_args *data = (iteracion_args*) args;
+
+    int izquierdo = loop_around(data->n - 1, data->n_comensales);
+    int derecho = loop_around(data->n + 1, data->n_comensales);
+
+    // Le robo los cubiertos a los de al lado
+    pthread_mutex_lock(&data->comensales[izquierdo].cuchillo);
+    pthread_mutex_lock(&data->comensales[derecho].tenedor);
+
+    for(int col = data->left; col < data->right; col++) {
+        for(int row = 0; row < data->board->rows; row++) {
+            data->new->cells[col][row] = new_value(*data->board, col, row);
+        }
+    }
+
+    // Les devuelvo los cubiertos porque ya les leí todo
+    pthread_mutex_unlock(&data->comensales[izquierdo].cuchillo);
+    pthread_mutex_unlock(&data->comensales[derecho].tenedor);
+
+    // Agarro mis cubiertos para escribir
+    pthread_mutex_lock(&data->comensales[data->n].tenedor);
+    pthread_mutex_lock(&data->comensales[data->n].cuchillo);
+
+    for(int col = data->left; col < data->right; col++) {
+        char* coso = data->board->cells[col];
+        data->board->cells[col] = data->new->cells[col];
+        free(coso);
+    }
+
+    pthread_mutex_unlock(&data->comensales[data->n].tenedor);
+    pthread_mutex_unlock(&data->comensales[data->n].cuchillo);
 }

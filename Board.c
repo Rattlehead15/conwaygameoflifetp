@@ -1,6 +1,7 @@
 #include "Board.h"
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 
 int board_init(board_t *board, size_t col, size_t row) {
     board->cols = col;
@@ -26,31 +27,31 @@ int board_set(board_t board, int col, int row, char val) {
 
 int board_load(board_t *board, char *str) {
     int amount, largo;
-    char letter, aux[10];
+    char letter;
     int x = 0, y = 0;
-    while(sscanf(str, " %d%c", &amount, &letter) == 2) {
+    while(sscanf(str, " %d%c ", &amount, &letter) == 2) {
         // char aliveOrDead = (letter == 'X') << 1;
         for(int i = 0; i < amount; i++) {
-            board_set(*board, x, y + i, letter/*aliveOrDead*/);
+            board_set(*board, x + i, y, letter/*aliveOrDead*/);
         }
-        
-        sprintf(aux,"%d", amount);
-        str += strlen(aux)+2;
-        y += amount;
-        x += y / board->rows;
-        y = y % board->rows;
+        str += (int) log10(amount) + 2;
+        while((str[0] < '0' || str[0] > '9') && str[0])
+            str++;
+        x += amount;
+        y += x / board->cols;
+        x = x % board->cols;
     }
     return 0;
 }
 
 void board_show(board_t board, char *res) {
-    for(int row = 0; row < board.rows; row++) {
-        for(int col = 0; col < board.cols; col++) {
-            res[row * (board.cols + 1) + col] = board.cells[row][col]; //? 'X' : 'O';
+    for(int col = 0; col < board.cols; col++) {
+        for(int row = 0; row < board.rows; row++) {
+            res[col * (board.rows + 1) + row] = board.cells[col][row]; //? 'X' : 'O';
         }
-        res[row * (board.cols + 1) + board.cols] = '\n';
+        res[col * (board.rows + 1) + board.rows] = '\n';
     }
-    res[board.rows * (board.cols + 1)] = '\0';
+    res[(board.rows + 1) * board.cols] = '\0';
 }
 
 void board_destroy(board_t *board) {

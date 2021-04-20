@@ -3,12 +3,9 @@
 #include "Board.h"
 
 int main() {
-    board_t tablero;
-    board_init(&tablero, 3, 3);
-    board_load(&tablero, "3X\n3O\n3X\0");
-    char coso[300];
-    board_show(tablero, coso);
-    printf("%s", coso);
-    board_destroy(&tablero);
+    game_t *juego = loadGame("Ejemplo.game");
+    conwayGoL(&juego->tablero, juego->ciclos, 4);
+    writeBoard(juego->tablero, "Salidarda.out");
+    board_destroy(&juego->tablero);
     return 0;
 }

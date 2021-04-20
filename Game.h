@@ -1,6 +1,7 @@
 #ifndef GAME_TYPES
 #define GAME_TYPES
 #include "Board.h"
+#include <pthread.h>
 
 /******************************************************************************/
 /* Representamos las células vivas como 'O' y las muertas como 'X' */
