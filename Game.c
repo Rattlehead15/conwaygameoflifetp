@@ -3,6 +3,7 @@
 #include <pthread.h>
 #include <unistd.h>
 #include "Game.h"
+#include <assert.h>
 
 #define SIZE 300
 
@@ -46,7 +47,13 @@ void *iteracion(void *args) {
     iteracion_args *data = (iteracion_args*) args;
     for(int i=0; i < data->cycles; i++) {
         board_t *new = malloc(sizeof(board_t));
-        board_init(new, data->right - data->left, data->board->rows);
+        if (new == NULL){
+            printf("Error al asignar memoria\n");
+            return -1;
+        }
+
+        if (board_init(new, data->right - data->left, data->board->rows ) == -1) 
+            return -1;
 
         int izquierdo = loop_around(data->n - 1, data->n_comensales);
         int derecho = loop_around(data->n + 1, data->n_comensales);
@@ -97,12 +104,11 @@ void *iteracion(void *args) {
 
 game_t *loadGame(const char *filename) {
     FILE * entrada = fopen(filename, "r+");
-
-    if(entrada == NULL){
-        printf("Error al leer el archivo de entrada.");
+    if(entrada == NULL) {
+        printf("Error al abrir el archivo de entrada.\n");
         return -1;
     }
-    
+
     char str[SIZE], aux[SIZE];
     str[0] = '\0';
     int ciclos, col, row;
@@ -110,11 +116,12 @@ game_t *loadGame(const char *filename) {
     while (fscanf(entrada,"%[^\n]\n", aux) != EOF) {
         strcat(str, aux);
     }
+    
     str[strlen(str)] = '\0';
     game_t *jueguito = malloc(sizeof(game_t));
 
-    if (board->cells[i] == NULL) {
-        printf("Error:No se pudo asignar la memoria para las columna %d de la tabla\n", i);
+    if (jueguito == NULL) {
+        printf("Error: no se pudo asignar la memoria al juego\n");
         return -1;
     }
 
@@ -134,6 +141,11 @@ game_t *loadGame(const char *filename) {
 void writeBoard(board_t board, const char *filename) {
     char str[SIZE];
     FILE * salida = fopen(filename,"w+");
+    if(salida == NULL) {
+        printf("Error al abrir el archivo de salida.\n");
+        return -1;
+    }
+
     board_show(board,str);
 
     // Convertir str a RLE
@@ -158,6 +170,10 @@ board_t *conwayGoL(board_t *board, unsigned int cycles, const int nuproc) {
     int cols_por_proceso = board->cols / nuproc;
     int resto = board->cols % nuproc;
     cubiertos *comensales = malloc(sizeof(cubiertos) * nuproc);
+    if(comensales == NULL){
+        printf("Error al asignar memoria\n");
+        return -1;
+    }
 
     pthread_barrier_t barrier;
     int procesos = cols_por_proceso ? nuproc : board->cols;
@@ -173,6 +189,10 @@ board_t *conwayGoL(board_t *board, unsigned int cycles, const int nuproc) {
     pthread_t *threads = malloc(sizeof(pthread_t) * procesos);
     for(int proc = 0; proc < procesos; proc++) {
         iteracion_args *args = malloc(sizeof(iteracion_args));
+        if(args == NULL){
+            printf("Error al asignar memoria\n");
+            return -1;
+        }
         args->board = board;
         args->left = left_offset;
         args->right = left_offset + cols_por_proceso;
@@ -186,11 +206,11 @@ board_t *conwayGoL(board_t *board, unsigned int cycles, const int nuproc) {
         args->barrier = &barrier;
         args->cycles = cycles;
         left_offset += args->right - args->left;
-        pthread_create(&threads[proc], NULL, iteracion, args);
+        assert(!pthread_create(&threads[proc], NULL, iteracion, args));
     }
     
     for(int proc = 0; proc < procesos; proc++) {
-        pthread_join(threads[proc], NULL);
+        assert(!pthread_join(threads[proc], NULL));
     }
 
     free(comensales);
