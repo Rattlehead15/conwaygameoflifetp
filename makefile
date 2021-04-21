@@ -6,10 +6,10 @@ clean:
 	rm *.o *.exe *.out
 
 main.exe: Game.o Board.o
-	gcc-9 $(FLAGS) -o main.exe main.c Game.o Board.o -lm -lpthread
+	gcc $(FLAGS) -o main.exe main.c Game.o Board.o -lm -lpthread
 
 Game.o: Game.c Game.h
-	gcc-9 -c $(FLAGS) Game.c
+	gcc -c $(FLAGS) Game.c
 
 Board.o: Board.c Board.h
-	gcc-9 -c $(FLAGS) Board.c
+	gcc -c $(FLAGS) Board.c

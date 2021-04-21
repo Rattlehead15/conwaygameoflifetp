@@ -26,72 +26,6 @@ struct _iteracion_args {
 
 typedef struct _iteracion_args iteracion_args;
 
-game_t *loadGame(const char *filename) {
-    FILE * entrada = fopen(filename, "r+");
-    char str[SIZE], aux[SIZE];
-    int ciclos, col, row;
-    fscanf(entrada," %d %d %d ", &ciclos, &col, &row);
-    while (fscanf(entrada,"%[^\n]\n", aux) != EOF) {
-        strcat(str, aux);
-    }
-    str[strlen(str)] = '\0';
-    game_t *jueguito = malloc(sizeof(game_t));
-    jueguito->ciclos = ciclos;
-    board_init(&jueguito->tablero, col, row);
-    board_load(&jueguito->tablero, str);
-    fclose(entrada);
-
-    return jueguito;
-}
-
-void writeBoard(board_t board, const char *filename) {
-    char str[300];
-    FILE * salida = fopen(filename,"w+");
-    board_show(board,str);
-    fprintf(salida,"%s", str);
-    fclose(salida);
-}
-
-void *iteracion(void* args);
-
-board_t *conwayGoL(board_t *board, unsigned int cycles, const int nuproc) {
-    int cols_por_proceso = board->cols / nuproc;
-    int resto = board->cols % nuproc;
-    cubiertos *comensales = malloc(sizeof(cubiertos) * nuproc);
-    for(int i=0; i < nuproc; i++) {
-        pthread_mutex_init(&comensales[i].tenedor, NULL);
-        pthread_mutex_init(&comensales[i].cuchillo, NULL);
-    }
-
-    pthread_barrier_t barrier;
-    int procesos = cols_por_proceso ? nuproc : board->cols;
-    pthread_barrier_init(&barrier, NULL, procesos);
-
-    int left_offset = 0;
-    pthread_t *threads = malloc(sizeof(pthread_t) * procesos);
-    for(int proc = 0; proc < procesos; proc++) {
-        iteracion_args *args = malloc(sizeof(iteracion_args));
-        args->board = board;
-        args->left = left_offset;
-        args->right = left_offset + cols_por_proceso;
-        if(resto > 0) {
-            args->right++;
-            resto--;
-        }
-        args->n = proc;
-        args->comensales = comensales;
-        args->n_comensales = procesos;
-        args->barrier = &barrier;
-        args->cycles = cycles;
-        left_offset += args->right - args->left;
-        pthread_create(&threads[proc], NULL, iteracion, args);
-    }
-    for(int proc = 0; proc < procesos; proc++) {
-        pthread_join(threads[proc], NULL);
-    }
-    return board;
-}
-
 char new_value(board_t board, int col, int row) {
     int is_alive = board.cells[col][row] == 'O';
     int neighbors = 0;
@@ -113,7 +47,7 @@ void *iteracion(void *args) {
     for(int i=0; i < data->cycles; i++) {
         board_t *new = malloc(sizeof(board_t));
         board_init(new, data->right - data->left, data->board->rows);
-        printf("THREAD %d TIENE %d COLUMNAS\n", data->n, data->right - data->left);
+        // printf("THREAD %d TIENE %d COLUMNAS\n", data->n, data->right - data->left);
 
         int izquierdo = loop_around(data->n - 1, data->n_comensales);
         int derecho = loop_around(data->n + 1, data->n_comensales);
@@ -147,9 +81,8 @@ void *iteracion(void *args) {
         //printf("THREAD %d ESCRIBIENDO RESULTADOS DE CICLO %d\n", data->n, i);
 
         for(int col = data->left; col < data->right; col++) {
-            char *coso = data->board->cells[col];
+            free(data->board->cells[col]);
             data->board->cells[col] = new->cells[col - data->left];
-            free(coso);
         }
 
         pthread_mutex_unlock(&data->comensales[data->n].tenedor);
@@ -157,8 +90,98 @@ void *iteracion(void *args) {
 
         //printf("THREAD %d TERMINO CICLO %d\n", data->n, i);
 
+        free(new->cells);
+        free(new);
+
         pthread_barrier_wait(data->barrier);
     }
 
+    free(data);
     pthread_exit(NULL);
+}
+
+game_t *loadGame(const char *filename) {
+    FILE * entrada = fopen(filename, "r+");
+    char str[SIZE], aux[SIZE];
+    str[0] = '\0';
+    int ciclos, col, row;
+    fscanf(entrada," %d %d %d ", &ciclos, &col, &row);
+    while (fscanf(entrada,"%[^\n]\n", aux) != EOF) {
+        strcat(str, aux);
+    }
+    str[strlen(str)] = '\0';
+    game_t *jueguito = malloc(sizeof(game_t));
+    jueguito->ciclos = ciclos;
+    board_init(&jueguito->tablero, col, row);
+    board_load(&jueguito->tablero, str);
+    fclose(entrada);
+
+    return jueguito;
+}
+
+void writeBoard(board_t board, const char *filename) {
+    char str[SIZE];
+    FILE * salida = fopen(filename,"w+");
+    board_show(board,str);
+
+    // Convertir str a RLE
+    int amount = 0;
+    char current = str[0];
+    for(int i = 0; str[i]; i++) {
+        if(str[i] == current) {
+            amount++;
+        } else {
+            fprintf(salida, "%d%c", amount, current);
+            amount = str[i] != '\n';
+            if(str[i] == '\n')
+                fputc(str[i], salida);
+            else
+                current = str[i];
+        }
+    }
+    fclose(salida);
+}
+
+board_t *conwayGoL(board_t *board, unsigned int cycles, const int nuproc) {
+    int cols_por_proceso = board->cols / nuproc;
+    int resto = board->cols % nuproc;
+    cubiertos *comensales = malloc(sizeof(cubiertos) * nuproc);
+
+    pthread_barrier_t barrier;
+    int procesos = cols_por_proceso ? nuproc : board->cols;
+    
+    for(int i=0; i < procesos; i++) {
+        pthread_mutex_init(&comensales[i].tenedor, NULL);
+        pthread_mutex_init(&comensales[i].cuchillo, NULL);
+    }
+    
+    pthread_barrier_init(&barrier, NULL, procesos);
+
+    int left_offset = 0;
+    pthread_t *threads = malloc(sizeof(pthread_t) * procesos);
+    for(int proc = 0; proc < procesos; proc++) {
+        iteracion_args *args = malloc(sizeof(iteracion_args));
+        args->board = board;
+        args->left = left_offset;
+        args->right = left_offset + cols_por_proceso;
+        if(resto > 0) {
+            args->right++;
+            resto--;
+        }
+        args->n = proc;
+        args->comensales = comensales;
+        args->n_comensales = procesos;
+        args->barrier = &barrier;
+        args->cycles = cycles;
+        left_offset += args->right - args->left;
+        pthread_create(&threads[proc], NULL, iteracion, args);
+    }
+    
+    for(int proc = 0; proc < procesos; proc++) {
+        pthread_join(threads[proc], NULL);
+    }
+
+    free(comensales);
+    free(threads);
+    return board;
 }
