@@ -7,8 +7,18 @@ int board_init(board_t *board, size_t col, size_t row) {
     board->cols = col;
     board->rows = row;
     board->cells = malloc(sizeof(char*) * col);
-    for (int i=0; i<col; i++)
+    if(!board->cells){
+        printf("Error:No se pudo asignar la memoria a la celda\n");
+        return -1;
+    }
+    for (int i=0; i<col; i++){
         board->cells[i] = malloc(sizeof(char) * row);
+        if (board->cells[i] == NULL) {
+            printf("Error:No se pudo asignar la memoria para las columna %d de la tabla\n", i);
+            return -1;
+        }
+    }
+
     return 0;
 }
 
@@ -30,9 +40,9 @@ int board_load(board_t *board, char *str) {
     char letter;
     int x = 0, y = 0;
     while(sscanf(str, " %d%c ", &amount, &letter) == 2) {
-        // char aliveOrDead = (letter == 'X') << 1;
+
         for(int i = 0; i < amount; i++) {
-            board_set(*board, x + i, y, letter/*aliveOrDead*/);
+            board_set(*board, x + i, y, letter);
         }
         str += (int) log10(amount) + 2;
         while((str[0] < '0' || str[0] > '9') && str[0])
@@ -47,7 +57,7 @@ int board_load(board_t *board, char *str) {
 void board_show(board_t board, char *res) {
     for(int row = 0; row < board.rows; row++) {
         for(int col = 0; col < board.cols; col++) {
-            res[row * (board.cols + 1) + col] = board.cells[col][row]; //? 'X' : 'O';
+            res[row * (board.cols + 1) + col] = board.cells[col][row];
         }
         res[row * (board.cols + 1) + board.cols] = '\n';
     }

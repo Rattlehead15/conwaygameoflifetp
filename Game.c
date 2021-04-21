@@ -47,7 +47,6 @@ void *iteracion(void *args) {
     for(int i=0; i < data->cycles; i++) {
         board_t *new = malloc(sizeof(board_t));
         board_init(new, data->right - data->left, data->board->rows);
-        // printf("THREAD %d TIENE %d COLUMNAS\n", data->n, data->right - data->left);
 
         int izquierdo = loop_around(data->n - 1, data->n_comensales);
         int derecho = loop_around(data->n + 1, data->n_comensales);
@@ -56,11 +55,10 @@ void *iteracion(void *args) {
         pthread_mutex_lock(&data->comensales[izquierdo].cuchillo);
         pthread_mutex_lock(&data->comensales[derecho].tenedor);
 
-        //printf("THREAD %d ROBO CUBIERTOS\n", data->n);
+
 
         pthread_barrier_wait(data->barrier);
 
-        //printf("THREAD %d CALCULANDO CICLO %d\n", data->n, i);
 
         for(int col = data->left; col < data->right; col++) {
             for(int row = 0; row < data->board->rows; row++) {
@@ -72,13 +70,12 @@ void *iteracion(void *args) {
         pthread_mutex_unlock(&data->comensales[izquierdo].cuchillo);
         pthread_mutex_unlock(&data->comensales[derecho].tenedor);
 
-        //printf("THREAD %d DEJO CUBIERTOS\n", data->n);
 
         // Agarro mis cubiertos para escribir
         pthread_mutex_lock(&data->comensales[data->n].tenedor);
         pthread_mutex_lock(&data->comensales[data->n].cuchillo);
 
-        //printf("THREAD %d ESCRIBIENDO RESULTADOS DE CICLO %d\n", data->n, i);
+
 
         for(int col = data->left; col < data->right; col++) {
             free(data->board->cells[col]);
@@ -87,8 +84,6 @@ void *iteracion(void *args) {
 
         pthread_mutex_unlock(&data->comensales[data->n].tenedor);
         pthread_mutex_unlock(&data->comensales[data->n].cuchillo);
-
-        //printf("THREAD %d TERMINO CICLO %d\n", data->n, i);
 
         free(new->cells);
         free(new);
@@ -102,6 +97,12 @@ void *iteracion(void *args) {
 
 game_t *loadGame(const char *filename) {
     FILE * entrada = fopen(filename, "r+");
+
+    if(entrada == NULL){
+        printf("Error al leer el archivo de entrada.");
+        return -1;
+    }
+    
     char str[SIZE], aux[SIZE];
     str[0] = '\0';
     int ciclos, col, row;
@@ -111,12 +112,23 @@ game_t *loadGame(const char *filename) {
     }
     str[strlen(str)] = '\0';
     game_t *jueguito = malloc(sizeof(game_t));
-    jueguito->ciclos = ciclos;
-    board_init(&jueguito->tablero, col, row);
-    board_load(&jueguito->tablero, str);
-    fclose(entrada);
 
-    return jueguito;
+    if (board->cells[i] == NULL) {
+        printf("Error:No se pudo asignar la memoria para las columna %d de la tabla\n", i);
+        return -1;
+    }
+
+    jueguito->ciclos = ciclos;
+    
+    if(board_init(&jueguito->tablero, col, row) != 1){
+        board_load(&jueguito->tablero, str);
+        fclose(entrada);
+        return jueguito;
+    } 
+    else{
+        return -1;
+    }
+
 }
 
 void writeBoard(board_t board, const char *filename) {
