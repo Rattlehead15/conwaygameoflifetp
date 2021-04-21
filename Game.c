@@ -15,12 +15,13 @@ typedef struct _cubiertos cubiertos;
 
 struct _iteracion_args {
     board_t *board;
-    board_t *new;
     int left;
     int right;
     int n;
     cubiertos *comensales;
     int n_comensales;
+    pthread_barrier_t *barrier;
+    int cycles;
 };
 
 typedef struct _iteracion_args iteracion_args;
@@ -54,46 +55,49 @@ void writeBoard(board_t board, const char *filename) {
 void *iteracion(void* args);
 
 board_t *conwayGoL(board_t *board, unsigned int cycles, const int nuproc) {
-    int cols_por_proceso = (board->cols + nuproc - 1) / nuproc;
+    int cols_por_proceso = board->cols / nuproc;
+    int resto = board->cols % nuproc;
     cubiertos *comensales = malloc(sizeof(cubiertos) * nuproc);
     for(int i=0; i < nuproc; i++) {
         pthread_mutex_init(&comensales[i].tenedor, NULL);
         pthread_mutex_init(&comensales[i].cuchillo, NULL);
     }
 
-    for(int i=0; i < cycles; i++) {
-        board_t *new = malloc(sizeof(board_t));
-        board_init(new, board->cols, board->rows);
-        int left_offset = 0;
-        pthread_t *threads = malloc(sizeof(pthread_t) * nuproc);
-        for(int proc = 0; proc < nuproc; proc++) {
-            iteracion_args *args = malloc(sizeof(iteracion_args));
-            args->board = board;
-            args->new = new;
-            args->left = left_offset;
-            args->right = board->cols < (left_offset + cols_por_proceso) ? board->cols : left_offset + cols_por_proceso;
-            args->n = proc;
-            args->comensales = comensales;
-            args->n_comensales = nuproc;
-            left_offset += args->right - args->left;
-            pthread_create(&threads[proc], NULL, iteracion, args);
+    pthread_barrier_t barrier;
+    int procesos = cols_por_proceso ? nuproc : board->cols;
+    pthread_barrier_init(&barrier, NULL, procesos);
+
+    int left_offset = 0;
+    pthread_t *threads = malloc(sizeof(pthread_t) * procesos);
+    for(int proc = 0; proc < procesos; proc++) {
+        iteracion_args *args = malloc(sizeof(iteracion_args));
+        args->board = board;
+        args->left = left_offset;
+        args->right = left_offset + cols_por_proceso;
+        if(resto > 0) {
+            args->right++;
+            resto--;
         }
-        for(int proc = 0; proc < nuproc; proc++) {
-            pthread_join(threads[proc], NULL);
-        }
+        args->n = proc;
+        args->comensales = comensales;
+        args->n_comensales = procesos;
+        args->barrier = &barrier;
+        args->cycles = cycles;
+        left_offset += args->right - args->left;
+        pthread_create(&threads[proc], NULL, iteracion, args);
+    }
+    for(int proc = 0; proc < procesos; proc++) {
+        pthread_join(threads[proc], NULL);
     }
     return board;
 }
 
 char new_value(board_t board, int col, int row) {
-    if(col == 2 && row == 2)
-        sleep(1);
     int is_alive = board.cells[col][row] == 'O';
     int neighbors = 0;
     for(int col_offset = -1; col_offset < 2; col_offset++) {
         for(int row_offset = -1; row_offset < 2; row_offset++) {
-            if(board_get_round(board, col + col_offset, row + row_offset) == 'O')
-                neighbors++;
+            neighbors += board_get_round(board, col + col_offset, row + row_offset) == 'O';
         }
     }
     if (is_alive) {
@@ -106,34 +110,55 @@ char new_value(board_t board, int col, int row) {
 
 void *iteracion(void *args) {
     iteracion_args *data = (iteracion_args*) args;
+    for(int i=0; i < data->cycles; i++) {
+        board_t *new = malloc(sizeof(board_t));
+        board_init(new, data->right - data->left, data->board->rows);
+        printf("THREAD %d TIENE %d COLUMNAS\n", data->n, data->right - data->left);
 
-    int izquierdo = loop_around(data->n - 1, data->n_comensales);
-    int derecho = loop_around(data->n + 1, data->n_comensales);
+        int izquierdo = loop_around(data->n - 1, data->n_comensales);
+        int derecho = loop_around(data->n + 1, data->n_comensales);
 
-    // Le robo los cubiertos a los de al lado
-    pthread_mutex_lock(&data->comensales[izquierdo].cuchillo);
-    pthread_mutex_lock(&data->comensales[derecho].tenedor);
+        // Le robo los cubiertos a los de al lado
+        pthread_mutex_lock(&data->comensales[izquierdo].cuchillo);
+        pthread_mutex_lock(&data->comensales[derecho].tenedor);
 
-    for(int col = data->left; col < data->right; col++) {
-        for(int row = 0; row < data->board->rows; row++) {
-            data->new->cells[col][row] = new_value(*data->board, col, row);
+        //printf("THREAD %d ROBO CUBIERTOS\n", data->n);
+
+        pthread_barrier_wait(data->barrier);
+
+        //printf("THREAD %d CALCULANDO CICLO %d\n", data->n, i);
+
+        for(int col = data->left; col < data->right; col++) {
+            for(int row = 0; row < data->board->rows; row++) {
+                new->cells[col - data->left][row] = new_value(*data->board, col, row);
+            }
         }
+
+        // Les devuelvo los cubiertos porque ya les leí todo
+        pthread_mutex_unlock(&data->comensales[izquierdo].cuchillo);
+        pthread_mutex_unlock(&data->comensales[derecho].tenedor);
+
+        //printf("THREAD %d DEJO CUBIERTOS\n", data->n);
+
+        // Agarro mis cubiertos para escribir
+        pthread_mutex_lock(&data->comensales[data->n].tenedor);
+        pthread_mutex_lock(&data->comensales[data->n].cuchillo);
+
+        //printf("THREAD %d ESCRIBIENDO RESULTADOS DE CICLO %d\n", data->n, i);
+
+        for(int col = data->left; col < data->right; col++) {
+            char *coso = data->board->cells[col];
+            data->board->cells[col] = new->cells[col - data->left];
+            free(coso);
+        }
+
+        pthread_mutex_unlock(&data->comensales[data->n].tenedor);
+        pthread_mutex_unlock(&data->comensales[data->n].cuchillo);
+
+        //printf("THREAD %d TERMINO CICLO %d\n", data->n, i);
+
+        pthread_barrier_wait(data->barrier);
     }
 
-    // Les devuelvo los cubiertos porque ya les leí todo
-    pthread_mutex_unlock(&data->comensales[izquierdo].cuchillo);
-    pthread_mutex_unlock(&data->comensales[derecho].tenedor);
-
-    // Agarro mis cubiertos para escribir
-    pthread_mutex_lock(&data->comensales[data->n].tenedor);
-    pthread_mutex_lock(&data->comensales[data->n].cuchillo);
-
-    for(int col = data->left; col < data->right; col++) {
-        char* coso = data->board->cells[col];
-        data->board->cells[col] = data->new->cells[col];
-        free(coso);
-    }
-
-    pthread_mutex_unlock(&data->comensales[data->n].tenedor);
-    pthread_mutex_unlock(&data->comensales[data->n].cuchillo);
+    pthread_exit(NULL);
 }

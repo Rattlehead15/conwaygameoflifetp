@@ -36,4 +36,9 @@ void board_show(board_t board, char *res);
 
 /* Destroy board */
 void board_destroy(board_t *board);
+
+/* Funcion auxiliar */
+
+/* Loopea modulo size */
+int loop_around(int index, int size);
 #endif

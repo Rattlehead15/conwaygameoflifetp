@@ -45,13 +45,13 @@ int board_load(board_t *board, char *str) {
 }
 
 void board_show(board_t board, char *res) {
-    for(int col = 0; col < board.cols; col++) {
-        for(int row = 0; row < board.rows; row++) {
-            res[col * (board.rows + 1) + row] = board.cells[col][row]; //? 'X' : 'O';
+    for(int row = 0; row < board.rows; row++) {
+        for(int col = 0; col < board.cols; col++) {
+            res[row * (board.cols + 1) + col] = board.cells[col][row]; //? 'X' : 'O';
         }
-        res[col * (board.rows + 1) + board.rows] = '\n';
+        res[row * (board.cols + 1) + board.cols] = '\n';
     }
-    res[(board.rows + 1) * board.cols] = '\0';
+    res[(board.cols + 1) * board.rows] = '\0';
 }
 
 void board_destroy(board_t *board) {
