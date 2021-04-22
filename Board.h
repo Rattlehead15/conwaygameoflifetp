@@ -6,7 +6,8 @@
 /******************************************************************************/
 /* Definición de la estructura de datos del tablero */
 
-struct _board {
+struct _board
+{
     char **cells;
     unsigned int cols;
     unsigned int rows;

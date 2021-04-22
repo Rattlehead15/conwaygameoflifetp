@@ -6,9 +6,14 @@
 /******************************************************************************/
 /* Representamos las células vivas como 'O' y las muertas como 'X' */
 
-enum State {ALIVE, DEAD};
+enum State
+{
+    ALIVE,
+    DEAD
+};
 /******************************************************************************/
-struct _game {
+struct _game
+{
     board_t tablero;
     int ciclos;
 };
