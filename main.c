@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <sys/sysinfo.h>
 #include <stdlib.h>
-#include "game.h"
+#include "Game.h"
 #include "Board.h"
 
 int main(int argc, char *argv[])
